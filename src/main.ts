@@ -51,7 +51,6 @@ const player: Player = { location: ORIGIN_CELL, collection: [] };
 const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
 const NEIGHBORHOOD_SIZE = 8;
-// const VISIBLE_RADIUS = TILE_DEGREES * NEIGHBORHOOD_SIZE;
 const CACHE_SPAWN_PROBABILITY = 0.1;
 
 // Create the map (element with id "map" is defined in index.html)
@@ -143,14 +142,17 @@ function spawnCache(cell: Cell) {
     popup_div
       .querySelector<HTMLButtonElement>("#drop-off")!
       .addEventListener("click", () => {
+        console.log("button clicked");
         if (player.collection.length > 0) {
           const selected_coin = player.collection.pop();
-          if (selected_coin != null) {
-            player.collection.push(selected_coin);
-          }
-          popup_div.querySelector<HTMLSpanElement>("#quantity")!.innerHTML =
-            `${loading_cache.inventory.length}`;
           playerUI.innerHTML = `Coins Collected: ${player.collection.length}`;
+          console.log("token removed");
+          if (selected_coin != null) {
+            loading_cache.inventory.push(selected_coin);
+            popup_div.querySelector<HTMLSpanElement>("#quantity")!.innerHTML =
+              `${loading_cache.inventory.length}`;
+            console.log("token recieved");
+          }
         }
       });
 
@@ -187,11 +189,7 @@ for (
       current_cell.x = Math.round(
         (current_cell.lng - ORIGIN_CELL.lng) / TILE_DEGREES,
       );
-      console.log(
-        `cell lat: ${current_cell.lat}, cell lng: ${current_cell.lng}, origin lat: ${ORIGIN_CELL.lat}, origin lng: ${ORIGIN_CELL.lng}`,
-      );
       spawnCache(current_cell);
-      console.log(`cache spawned`);
     }
   }
 }
