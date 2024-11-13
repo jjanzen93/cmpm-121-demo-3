@@ -34,17 +34,19 @@ interface Player {
   collection: Coin[];
 }
 
-// Location of our classroom (as identified on Google Maps)
-const OAKES_CLASSROOM = leaflet.latLng(36.98949379578402, -122.06277128548504);
+// Location of the classroom
+const ORIGIN_COORDS = leaflet.latLng(36.98949379578402, -122.06277128548504);
+
+// Defining the origin cell using classroom location
 const ORIGIN_CELL: Cell = {
   x: 0,
   y: 0,
-  lat: OAKES_CLASSROOM.lat,
-  lng: OAKES_CLASSROOM.lng,
+  lat: ORIGIN_COORDS.lat,
+  lng: ORIGIN_COORDS.lng,
   discovered: true,
 };
 
-// Player Object
+// Player object
 const player: Player = { location: ORIGIN_CELL, collection: [] };
 
 // Tunable gameplay parameters
@@ -55,7 +57,7 @@ const CACHE_SPAWN_PROBABILITY = 0.1;
 
 // Create the map (element with id "map" is defined in index.html)
 const map = leaflet.map(document.getElementById("map")!, {
-  center: OAKES_CLASSROOM,
+  center: ORIGIN_COORDS,
   zoom: GAMEPLAY_ZOOM_LEVEL,
   minZoom: GAMEPLAY_ZOOM_LEVEL,
   maxZoom: GAMEPLAY_ZOOM_LEVEL,
@@ -73,13 +75,15 @@ leaflet
   .addTo(map);
 
 // Add a marker to represent the player
-const playerMarker = leaflet.marker(OAKES_CLASSROOM);
-playerMarker.bindTooltip("That's you!");
+const playerMarker = leaflet.marker(ORIGIN_COORDS);
+playerMarker.bindTooltip("You are here.");
 playerMarker.addTo(map);
 
-// Display the player's points
+// Display the player's collection size
 const playerUI = document.querySelector<HTMLDivElement>("#playerUI")!; // element `playerUI` is defined in index.html
-playerUI.innerHTML = "No coins yet...";
+playerUI.innerHTML = `Coins Collected: ${player.collection.length}`;
+
+// TODO: Display the serials of each coin with a button to prioritize it at the next drop off event.
 
 // Add a new coin to a given cache
 function mintCoin(target_cache: Cache) {
@@ -118,14 +122,15 @@ function spawnCache(cell: Cell) {
 
   // Handle interactions with the cache
   rect.bindPopup(() => {
-    // The popup offers a description and button
+    // The popup offers a description and button, using the cell's custom coordinates rather than absolute lat/long
     const popup_div = document.createElement("div");
     popup_div.innerHTML = `
                     <div>There is a cache here at "${cell.x},${cell.y}". You find <span id="quantity">${loading_cache.inventory.length}</span> coin(s) inside.</div>
                     <button id="pick-up">pick up</button>
                     <button id="drop-off">drop off</button>`;
 
-    // Clicking the button decrements the cache's value and increments the player's points
+    // Clicking the pick up button transfers the most recently added coin from the cache to the player
+    // TODO: Make a separate pick up event that will allow player to be more specific about which coin they pick up
     popup_div
       .querySelector<HTMLButtonElement>("#pick-up")!
       .addEventListener("click", () => {
@@ -139,6 +144,8 @@ function spawnCache(cell: Cell) {
           playerUI.innerHTML = `Coins Collected: ${player.collection.length}`;
         }
       });
+    // Clicking the drop off button transfers the most recently added coin from the player to the cache
+    // TODO: Make a separate drop off event that will allow player to be more specific about which coin they drop
     popup_div
       .querySelector<HTMLButtonElement>("#drop-off")!
       .addEventListener("click", () => {
@@ -160,7 +167,8 @@ function spawnCache(cell: Cell) {
   });
 }
 
-// Look around the player's neighborhood for caches to spawn
+// Look around the player's range for caches to spawn
+// TODO: Extract to function for when player movement needs to update nearby caches.
 for (
   let i = player.location.x - NEIGHBORHOOD_SIZE;
   i < player.location.x + NEIGHBORHOOD_SIZE;
@@ -171,7 +179,8 @@ for (
     j < player.location.y + NEIGHBORHOOD_SIZE;
     j++
   ) {
-    // If location i,j is lucky enough, spawn a cache!
+    // If the cell is lucky, create a cell object and spawn a cache inside.
+    // TODO: spawn cells regardless of whether or not they are lucky
     if (
       luck([i * TILE_DEGREES, j * TILE_DEGREES].toString()) <
         CACHE_SPAWN_PROBABILITY
@@ -183,6 +192,7 @@ for (
         lng: (j * TILE_DEGREES) + player.location.lng,
         discovered: true,
       };
+      // convert absolute coordinates to relative cell coordinates
       current_cell.y = Math.round(
         (current_cell.lat - ORIGIN_CELL.lat) / TILE_DEGREES,
       );
