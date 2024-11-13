@@ -33,7 +33,7 @@ interface Player {
 }
 
 // Location of our classroom (as identified on Google Maps)
-const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
+const OAKES_CLASSROOM = leaflet.latLng(36.98949379578402, -122.06277128548504);
 
 // Player Object
 const player: Player = { location: OAKES_CLASSROOM, collection: [] };
@@ -42,6 +42,7 @@ const player: Player = { location: OAKES_CLASSROOM, collection: [] };
 const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
 const NEIGHBORHOOD_SIZE = 8;
+const VISIBLE_RADIUS = TILE_DEGREES * NEIGHBORHOOD_SIZE;
 const CACHE_SPAWN_PROBABILITY = 0.1;
 
 // Create the map (element with id "map" is defined in index.html)
@@ -85,12 +86,12 @@ function mintCoin(target_cache: Cache) {
 // Add caches to the map by cell numbers
 function spawnCache(cell: Cell) {
   // Convert cell numbers into lat/lng bounds
-  const origin = OAKES_CLASSROOM;
+  const origin = player.location;
   const bounds = leaflet.latLngBounds([
-    [origin.lat + cell.i * TILE_DEGREES, origin.lng + cell.j * TILE_DEGREES],
+    [origin.lat + cell.i, origin.lng + cell.j],
     [
-      origin.lat + (cell.i + 1) * TILE_DEGREES,
-      origin.lng + (cell.j + 1) * TILE_DEGREES,
+      origin.lat + (cell.i + TILE_DEGREES),
+      origin.lng + (cell.j + TILE_DEGREES),
     ],
   ]);
 
@@ -136,8 +137,24 @@ function spawnCache(cell: Cell) {
 }
 
 // Look around the player's neighborhood for caches to spawn
-for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
-  for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j++) {
+for (let i = -VISIBLE_RADIUS; i < VISIBLE_RADIUS; i += TILE_DEGREES) {
+  for (let j = -VISIBLE_RADIUS; j < VISIBLE_RADIUS; j += TILE_DEGREES) {
+    // If location i,j is lucky enough, spawn a cache!
+    if (luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY) {
+      const current_cell: Cell = { i: i, j: j, discovered: true };
+      spawnCache(current_cell);
+      console.log(`cache spawned`);
+    }
+  }
+}
+
+const new_location = new leaflet.LatLng(36.99049379578402, -122.06277128548504);
+playerMarker.setLatLng(new_location);
+player.location = new_location;
+
+// Look around the player's neighborhood for caches to spawn
+for (let i = -VISIBLE_RADIUS; i < VISIBLE_RADIUS; i += TILE_DEGREES) {
+  for (let j = -VISIBLE_RADIUS; j < VISIBLE_RADIUS; j += TILE_DEGREES) {
     // If location i,j is lucky enough, spawn a cache!
     if (luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY) {
       const current_cell: Cell = { i: i, j: j, discovered: true };
