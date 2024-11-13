@@ -12,8 +12,10 @@ import "./leafletWorkaround.ts";
 import luck from "./luck.ts";
 
 interface Cell {
-  i: number;
-  j: number;
+  x: number;
+  y: number;
+  lat: number;
+  lng: number;
   discovered: boolean;
 }
 
@@ -28,21 +30,28 @@ interface Cache {
 }
 
 interface Player {
-  location: leaflet.LatLng;
+  location: Cell;
   collection: Coin[];
 }
 
 // Location of our classroom (as identified on Google Maps)
 const OAKES_CLASSROOM = leaflet.latLng(36.98949379578402, -122.06277128548504);
+const ORIGIN_CELL: Cell = {
+  x: 0,
+  y: 0,
+  lat: OAKES_CLASSROOM.lat,
+  lng: OAKES_CLASSROOM.lng,
+  discovered: true,
+};
 
 // Player Object
-const player: Player = { location: OAKES_CLASSROOM, collection: [] };
+const player: Player = { location: ORIGIN_CELL, collection: [] };
 
 // Tunable gameplay parameters
 const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
 const NEIGHBORHOOD_SIZE = 8;
-const VISIBLE_RADIUS = TILE_DEGREES * NEIGHBORHOOD_SIZE;
+// const VISIBLE_RADIUS = TILE_DEGREES * NEIGHBORHOOD_SIZE;
 const CACHE_SPAWN_PROBABILITY = 0.1;
 
 // Create the map (element with id "map" is defined in index.html)
@@ -78,7 +87,7 @@ function mintCoin(target_cache: Cache) {
   const new_coin: Coin = {
     origin: target_cache.location,
     serial:
-      `${target_cache.location.i}:${target_cache.location.j}::${target_cache.inventory.length}`,
+      `${target_cache.location.x}:${target_cache.location.y}::${target_cache.inventory.length}`,
   };
   target_cache.inventory.push(new_coin);
 }
@@ -86,19 +95,18 @@ function mintCoin(target_cache: Cache) {
 // Add caches to the map by cell numbers
 function spawnCache(cell: Cell) {
   // Convert cell numbers into lat/lng bounds
-  const origin = player.location;
   const bounds = leaflet.latLngBounds([
-    [origin.lat + cell.i, origin.lng + cell.j],
+    [cell.lat, cell.lng],
     [
-      origin.lat + (cell.i + TILE_DEGREES),
-      origin.lng + (cell.j + TILE_DEGREES),
+      cell.lat + TILE_DEGREES,
+      cell.lng + TILE_DEGREES,
     ],
   ]);
 
   // Fill cache
   const loading_cache: Cache = { location: cell, inventory: [] };
   for (
-    let i = Math.round(luck([cell.i, cell.j].toString()) * 100);
+    let i = Math.round(luck([cell.x, cell.y].toString()) * 100);
     i > 0;
     i--
   ) {
@@ -114,12 +122,13 @@ function spawnCache(cell: Cell) {
     // The popup offers a description and button
     const popup_div = document.createElement("div");
     popup_div.innerHTML = `
-                    <div>There is a cache here at "${cell.i},${cell.j}". You find <span id="quantity">${loading_cache.inventory.length}</span> coin(s) inside.</div>
-                    <button id="pickup">pickup</button>`;
+                    <div>There is a cache here at "${cell.x},${cell.y}". You find <span id="quantity">${loading_cache.inventory.length}</span> coin(s) inside.</div>
+                    <button id="pick-up">pick up</button>
+                    <button id="drop-off">drop off</button>`;
 
     // Clicking the button decrements the cache's value and increments the player's points
     popup_div
-      .querySelector<HTMLButtonElement>("#pickup")!
+      .querySelector<HTMLButtonElement>("#pick-up")!
       .addEventListener("click", () => {
         if (loading_cache.inventory.length > 0) {
           const selected_coin = loading_cache.inventory.pop();
@@ -131,33 +140,56 @@ function spawnCache(cell: Cell) {
           playerUI.innerHTML = `Coins Collected: ${player.collection.length}`;
         }
       });
+    popup_div
+      .querySelector<HTMLButtonElement>("#drop-off")!
+      .addEventListener("click", () => {
+        if (player.collection.length > 0) {
+          const selected_coin = player.collection.pop();
+          if (selected_coin != null) {
+            player.collection.push(selected_coin);
+          }
+          popup_div.querySelector<HTMLSpanElement>("#quantity")!.innerHTML =
+            `${loading_cache.inventory.length}`;
+          playerUI.innerHTML = `Coins Collected: ${player.collection.length}`;
+        }
+      });
 
     return popup_div;
   });
 }
 
 // Look around the player's neighborhood for caches to spawn
-for (let i = -VISIBLE_RADIUS; i < VISIBLE_RADIUS; i += TILE_DEGREES) {
-  for (let j = -VISIBLE_RADIUS; j < VISIBLE_RADIUS; j += TILE_DEGREES) {
+for (
+  let i = player.location.x - NEIGHBORHOOD_SIZE;
+  i < player.location.x + NEIGHBORHOOD_SIZE;
+  i++
+) {
+  for (
+    let j = player.location.y - NEIGHBORHOOD_SIZE;
+    j < player.location.y + NEIGHBORHOOD_SIZE;
+    j++
+  ) {
     // If location i,j is lucky enough, spawn a cache!
-    if (luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      const current_cell: Cell = { i: i, j: j, discovered: true };
-      spawnCache(current_cell);
-      console.log(`cache spawned`);
-    }
-  }
-}
-
-const new_location = new leaflet.LatLng(36.99049379578402, -122.06277128548504);
-playerMarker.setLatLng(new_location);
-player.location = new_location;
-
-// Look around the player's neighborhood for caches to spawn
-for (let i = -VISIBLE_RADIUS; i < VISIBLE_RADIUS; i += TILE_DEGREES) {
-  for (let j = -VISIBLE_RADIUS; j < VISIBLE_RADIUS; j += TILE_DEGREES) {
-    // If location i,j is lucky enough, spawn a cache!
-    if (luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      const current_cell: Cell = { i: i, j: j, discovered: true };
+    if (
+      luck([i * TILE_DEGREES, j * TILE_DEGREES].toString()) <
+        CACHE_SPAWN_PROBABILITY
+    ) {
+      const current_cell: Cell = {
+        x: 0,
+        y: 0,
+        lat: (i * TILE_DEGREES) + player.location.lat,
+        lng: (j * TILE_DEGREES) + player.location.lng,
+        discovered: true,
+      };
+      current_cell.y = Math.round(
+        (current_cell.lat - ORIGIN_CELL.lat) / TILE_DEGREES,
+      );
+      current_cell.x = Math.round(
+        (current_cell.lng - ORIGIN_CELL.lng) / TILE_DEGREES,
+      );
+      console.log(
+        `cell lat: ${current_cell.lat}, cell lng: ${current_cell.lng}, origin lat: ${ORIGIN_CELL.lat}, origin lng: ${ORIGIN_CELL.lng}`,
+      );
       spawnCache(current_cell);
       console.log(`cache spawned`);
     }
