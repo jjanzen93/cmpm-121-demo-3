@@ -35,7 +35,7 @@ interface Player {
 }
 
 // Location of the classroom
-const ORIGIN_COORDS = leaflet.latLng(36.98949379578402, -122.06277128548504);
+const ORIGIN_COORDS = leaflet.latLng(0, 0);
 
 // Defining the origin cell using classroom location
 const ORIGIN_CELL: Cell = {
