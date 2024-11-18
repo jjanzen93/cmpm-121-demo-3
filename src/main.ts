@@ -11,12 +11,12 @@ import "./leafletWorkaround.ts";
 // Deterministic random number generator
 import luck from "./luck.ts";
 
+// flyweight board
+import { Board } from "./board.ts";
+
 interface Cell {
   x: number;
   y: number;
-  lat: number;
-  lng: number;
-  discovered: boolean;
 }
 
 interface Coin {
@@ -30,30 +30,26 @@ interface Cache {
 }
 
 interface Player {
-  location: Cell;
+  location: leaflet.LatLng;
   collection: Coin[];
 }
 
-// Location of the classroom
+// Origin (currently Null Island)
 const ORIGIN_COORDS = leaflet.latLng(0, 0);
-
-// Defining the origin cell using classroom location
-const ORIGIN_CELL: Cell = {
-  x: 0,
-  y: 0,
-  lat: ORIGIN_COORDS.lat,
-  lng: ORIGIN_COORDS.lng,
-  discovered: true,
-};
-
-// Player object
-const player: Player = { location: ORIGIN_CELL, collection: [] };
+//const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
+const GRID_OFFSET = -.00005;
 
 // Tunable gameplay parameters
 const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
 const NEIGHBORHOOD_SIZE = 8;
 const CACHE_SPAWN_PROBABILITY = 0.1;
+
+// Player object
+const player: Player = { location: ORIGIN_COORDS, collection: [] };
+
+// Board object
+const board: Board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE, GRID_OFFSET);
 
 // Create the map (element with id "map" is defined in index.html)
 const map = leaflet.map(document.getElementById("map")!, {
@@ -83,14 +79,14 @@ playerMarker.addTo(map);
 const playerUI = document.querySelector<HTMLDivElement>("#playerUI")!; // element `playerUI` is defined in index.html
 playerUI.innerHTML = `Coins Collected: ${player.collection.length}`;
 
-// TODO: Display the serials of each coin with a button to prioritize it at the next drop off event.
+// TODO: Coin Prioritization
 
 // Add a new coin to a given cache
 function mintCoin(target_cache: Cache) {
   const new_coin: Coin = {
     origin: target_cache.location,
     serial:
-      `${target_cache.location.x}:${target_cache.location.y}::${target_cache.inventory.length}`,
+      `${target_cache.location.x}:${target_cache.location.y}#${target_cache.inventory.length}`,
   };
   target_cache.inventory.push(new_coin);
 }
@@ -98,13 +94,7 @@ function mintCoin(target_cache: Cache) {
 // Add caches to the map by cell numbers
 function spawnCache(cell: Cell) {
   // Convert cell numbers into lat/lng bounds
-  const bounds = leaflet.latLngBounds([
-    [cell.lat, cell.lng],
-    [
-      cell.lat + TILE_DEGREES,
-      cell.lng + TILE_DEGREES,
-    ],
-  ]);
+  const bounds = board.getCellBounds(cell);
 
   // Fill cache
   const loading_cache: Cache = { location: cell, inventory: [] };
@@ -141,7 +131,9 @@ function spawnCache(cell: Cell) {
           if (selected_coin != null) {
             player.collection.push(selected_coin);
           }
-          playerUI.innerHTML = `Coins Collected: ${player.collection.length}`;
+          playerUI.innerHTML =
+            `Coins Collected: ${player.collection.length}<br>` +
+            inventoryToString(player.collection);
         }
       });
     // Clicking the drop off button transfers the most recently added coin from the player to the cache
@@ -152,7 +144,9 @@ function spawnCache(cell: Cell) {
         console.log("button clicked");
         if (player.collection.length > 0) {
           const selected_coin = player.collection.pop();
-          playerUI.innerHTML = `Coins Collected: ${player.collection.length}`;
+          playerUI.innerHTML =
+            `Coins Collected: ${player.collection.length}<br>` +
+            inventoryToString(player.collection);
           console.log("token removed");
           if (selected_coin != null) {
             loading_cache.inventory.push(selected_coin);
@@ -167,39 +161,29 @@ function spawnCache(cell: Cell) {
   });
 }
 
+// convert given cell list to string
+
+function inventoryToString(inventory: Coin[]) {
+  let invString = `Inventory:<br>`;
+  inventory.forEach((coin: Coin) => {
+    invString += `[` + coin.serial + `]<br>`;
+  });
+  return invString;
+}
+
 // Look around the player's range for caches to spawn
-// TODO: Extract to function for when player movement needs to update nearby caches.
-for (
-  let i = player.location.x - NEIGHBORHOOD_SIZE;
-  i < player.location.x + NEIGHBORHOOD_SIZE;
-  i++
-) {
-  for (
-    let j = player.location.y - NEIGHBORHOOD_SIZE;
-    j < player.location.y + NEIGHBORHOOD_SIZE;
-    j++
-  ) {
-    // If the cell is lucky, create a cell object and spawn a cache inside.
-    // TODO: spawn cells regardless of whether or not they are lucky
+
+function updatePosition() {
+  const nearby_cells = board.getCellsNearPoint(player.location);
+  nearby_cells.forEach((cell: Cell) => {
     if (
-      luck([i * TILE_DEGREES, j * TILE_DEGREES].toString()) <
+      luck([cell.x * TILE_DEGREES, cell.y * TILE_DEGREES].toString()) <
         CACHE_SPAWN_PROBABILITY
     ) {
-      const current_cell: Cell = {
-        x: 0,
-        y: 0,
-        lat: (i * TILE_DEGREES) + player.location.lat,
-        lng: (j * TILE_DEGREES) + player.location.lng,
-        discovered: true,
-      };
-      // convert absolute coordinates to relative cell coordinates
-      current_cell.y = Math.round(
-        (current_cell.lat - ORIGIN_CELL.lat) / TILE_DEGREES,
-      );
-      current_cell.x = Math.round(
-        (current_cell.lng - ORIGIN_CELL.lng) / TILE_DEGREES,
-      );
-      spawnCache(current_cell);
+      console.log("cache spawning...");
+      spawnCache(cell);
     }
-  }
+  });
 }
+
+updatePosition();
