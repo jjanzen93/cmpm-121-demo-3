@@ -174,6 +174,7 @@ function inventoryToString(inventory: Coin[]) {
 // Look around the player's range for caches to spawn
 
 function updatePosition() {
+  playerMarker.setLatLng(player.location);
   const nearby_cells = board.getCellsNearPoint(player.location);
   nearby_cells.forEach((cell: Cell) => {
     if (
@@ -185,5 +186,35 @@ function updatePosition() {
     }
   });
 }
+
+const controlPanel = document.querySelector<HTMLDivElement>("#controlPanel")!;
+controlPanel.querySelector<HTMLButtonElement>("#north")!.addEventListener(
+  "click",
+  () => {
+    player.location.lat += TILE_DEGREES;
+    updatePosition();
+  },
+);
+controlPanel.querySelector<HTMLButtonElement>("#south")!.addEventListener(
+  "click",
+  () => {
+    player.location.lat -= TILE_DEGREES;
+    updatePosition();
+  },
+);
+controlPanel.querySelector<HTMLButtonElement>("#east")!.addEventListener(
+  "click",
+  () => {
+    player.location.lng += TILE_DEGREES;
+    updatePosition();
+  },
+);
+controlPanel.querySelector<HTMLButtonElement>("#west")!.addEventListener(
+  "click",
+  () => {
+    player.location.lng -= TILE_DEGREES;
+    updatePosition();
+  },
+);
 
 updatePosition();
