@@ -19,14 +19,97 @@ interface Cell {
   y: number;
 }
 
+const DEFAULT_CELL: Cell = { x: 0, y: 0 };
+
 interface Coin {
   origin: Cell;
   serial: string;
 }
 
-interface Cache {
+interface Momento<T> {
+  toMomento(): T;
+  fromMomento(momento: T): void;
+}
+
+class Cache implements Momento<string> {
   location: Cell;
   inventory: Coin[];
+  constructor(location: Cell = DEFAULT_CELL, inventory: Coin[] = []) {
+    this.location = location;
+    this.inventory = inventory;
+  }
+  toMomento() {
+    return JSON.stringify([this.location, this.inventory]);
+  }
+
+  fromMomento(momento: string) {
+    const newarray = JSON.parse(momento);
+    try {
+      this.location = board.getCanonicalCell(newarray[0]);
+    } catch (error) {
+      console.error("An error occurred:", error);
+    }
+    try {
+      this.inventory = newarray[1];
+    } catch (error) {
+      console.error("An error occurred:", error);
+    }
+  }
+
+  drawCache() {
+    // Add a rectangle to the map to represent the cache
+    const bounds = board.getCellBounds(this.location);
+    const rect = leaflet.rectangle(bounds);
+    rect.addTo(map);
+    rects.push(rect);
+
+    // Handle interactions with the cache
+    rect.bindPopup(() => {
+      // The popup offers a description and button, using the cell's custom coordinates rather than absolute lat/long
+      const popup_div = document.createElement("div");
+      popup_div.innerHTML = `
+                      <div>There is a cache here at "${this.location.x},${this.location.y}". You find <span id="quantity">${this.inventory.length}</span> coin(s) inside.</div>
+                      <button id="pick-up">pick up</button>
+                      <button id="drop-off">drop off</button>`;
+
+      // Clicking the pick up button transfers the most recently added coin from the cache to the player
+      // TODO: Make a separate pick up event that will allow player to be more specific about which coin they pick up
+      popup_div
+        .querySelector<HTMLButtonElement>("#pick-up")!
+        .addEventListener("click", () => {
+          if (this.inventory.length > 0) {
+            const selected_coin = this.inventory.pop();
+            popup_div.querySelector<HTMLSpanElement>("#quantity")!.innerHTML =
+              `${this.inventory.length}`;
+            if (selected_coin != null) {
+              player.collection.push(selected_coin);
+            }
+            playerUI.innerHTML =
+              `Coins Collected: ${player.collection.length}<br>` +
+              inventoryToString(player.collection);
+          }
+        });
+      // Clicking the drop off button transfers the most recently added coin from the player to the cache
+      // TODO: Make a separate drop off event that will allow player to be more specific about which coin they drop
+      popup_div
+        .querySelector<HTMLButtonElement>("#drop-off")!
+        .addEventListener("click", () => {
+          if (player.collection.length > 0) {
+            const selected_coin = player.collection.pop();
+            playerUI.innerHTML =
+              `Coins Collected: ${player.collection.length}<br>` +
+              inventoryToString(player.collection);
+            if (selected_coin != null) {
+              this.inventory.push(selected_coin);
+              popup_div.querySelector<HTMLSpanElement>("#quantity")!.innerHTML =
+                `${this.inventory.length}`;
+            }
+          }
+        });
+
+      return popup_div;
+    });
+  }
 }
 
 interface Player {
@@ -50,6 +133,10 @@ const player: Player = { location: ORIGIN_COORDS, collection: [] };
 
 // Board object
 const board: Board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE, GRID_OFFSET);
+
+const unloaded_caches: string[] = [];
+let loaded_caches: Cache[] = [];
+let rects: leaflet.Rectangle[] = [];
 
 // Create the map (element with id "map" is defined in index.html)
 const map = leaflet.map(document.getElementById("map")!, {
@@ -93,11 +180,8 @@ function mintCoin(target_cache: Cache) {
 
 // Add caches to the map by cell numbers
 function spawnCache(cell: Cell) {
-  // Convert cell numbers into lat/lng bounds
-  const bounds = board.getCellBounds(cell);
-
+  const loading_cache: Cache = new Cache(cell, []);
   // Fill cache
-  const loading_cache: Cache = { location: cell, inventory: [] };
   for (
     let i = Math.round(luck([cell.x, cell.y].toString()) * 100);
     i > 0;
@@ -106,59 +190,9 @@ function spawnCache(cell: Cell) {
     mintCoin(loading_cache);
   }
 
-  // Add a rectangle to the map to represent the cache
-  const rect = leaflet.rectangle(bounds);
-  rect.addTo(map);
+  loading_cache.drawCache();
 
-  // Handle interactions with the cache
-  rect.bindPopup(() => {
-    // The popup offers a description and button, using the cell's custom coordinates rather than absolute lat/long
-    const popup_div = document.createElement("div");
-    popup_div.innerHTML = `
-                    <div>There is a cache here at "${cell.x},${cell.y}". You find <span id="quantity">${loading_cache.inventory.length}</span> coin(s) inside.</div>
-                    <button id="pick-up">pick up</button>
-                    <button id="drop-off">drop off</button>`;
-
-    // Clicking the pick up button transfers the most recently added coin from the cache to the player
-    // TODO: Make a separate pick up event that will allow player to be more specific about which coin they pick up
-    popup_div
-      .querySelector<HTMLButtonElement>("#pick-up")!
-      .addEventListener("click", () => {
-        if (loading_cache.inventory.length > 0) {
-          const selected_coin = loading_cache.inventory.pop();
-          popup_div.querySelector<HTMLSpanElement>("#quantity")!.innerHTML =
-            `${loading_cache.inventory.length}`;
-          if (selected_coin != null) {
-            player.collection.push(selected_coin);
-          }
-          playerUI.innerHTML =
-            `Coins Collected: ${player.collection.length}<br>` +
-            inventoryToString(player.collection);
-        }
-      });
-    // Clicking the drop off button transfers the most recently added coin from the player to the cache
-    // TODO: Make a separate drop off event that will allow player to be more specific about which coin they drop
-    popup_div
-      .querySelector<HTMLButtonElement>("#drop-off")!
-      .addEventListener("click", () => {
-        console.log("button clicked");
-        if (player.collection.length > 0) {
-          const selected_coin = player.collection.pop();
-          playerUI.innerHTML =
-            `Coins Collected: ${player.collection.length}<br>` +
-            inventoryToString(player.collection);
-          console.log("token removed");
-          if (selected_coin != null) {
-            loading_cache.inventory.push(selected_coin);
-            popup_div.querySelector<HTMLSpanElement>("#quantity")!.innerHTML =
-              `${loading_cache.inventory.length}`;
-            console.log("token recieved");
-          }
-        }
-      });
-
-    return popup_div;
-  });
+  loaded_caches.push(loading_cache);
 }
 
 // convert given cell list to string
@@ -175,16 +209,52 @@ function inventoryToString(inventory: Coin[]) {
 
 function updatePosition() {
   playerMarker.setLatLng(player.location);
+
+  loaded_caches.forEach((cache) => {
+    unloaded_caches.push(cache.toMomento());
+  });
+  loaded_caches = [];
+  rects.forEach((rect) => {
+    rect.remove();
+  });
+  rects = [];
+
   const nearby_cells = board.getCellsNearPoint(player.location);
+
   nearby_cells.forEach((cell: Cell) => {
     if (
       luck([cell.x * TILE_DEGREES, cell.y * TILE_DEGREES].toString()) <
         CACHE_SPAWN_PROBABILITY
     ) {
-      console.log("cache spawning...");
-      spawnCache(cell);
+      let cache_exists = false;
+      unloaded_caches.forEach((cache_str) => {
+        const parsed_cache = new Cache();
+        parsed_cache.fromMomento(cache_str);
+        if (parsed_cache.location == cell) {
+          cache_exists = true;
+          parsed_cache.drawCache();
+          loaded_caches.push(parsed_cache);
+          unloaded_caches.splice(unloaded_caches.indexOf(cache_str), 1);
+        }
+        console.log(parsed_cache.location);
+        console.log("Cache loaded? " + checkLoadStatus(parsed_cache));
+      });
+      if (!cache_exists) {
+        console.log("cache spawning...");
+        spawnCache(cell);
+      }
     }
   });
+  console.log(unloaded_caches.length);
+}
+
+function checkLoadStatus(cache: Cache) {
+  loaded_caches.forEach((current) => {
+    if (cache == current) {
+      return true;
+    }
+  });
+  return false;
 }
 
 const controlPanel = document.querySelector<HTMLDivElement>("#controlPanel")!;
@@ -218,3 +288,14 @@ controlPanel.querySelector<HTMLButtonElement>("#west")!.addEventListener(
 );
 
 updatePosition();
+console.log("Testing momento:");
+const cache_test = new Cache({ x: 3, y: 3 }, []);
+const cache_test_2 = new Cache();
+const cache_1_string = cache_test.toMomento();
+cache_test_2.fromMomento(cache_1_string);
+console.log(
+  "is cache cell test 1 and 2 equal? " +
+    (cache_test.location == cache_test_2.location),
+);
+console.log("cell 1: " + cache_test.location.y);
+console.log("cell 2: " + cache_test_2.location.y);
