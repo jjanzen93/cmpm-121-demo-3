@@ -19,7 +19,19 @@ interface Cell {
   y: number;
 }
 
-const DEFAULT_CELL: Cell = { x: 0, y: 0 };
+// Origin (currently Null Island)
+const ORIGIN_COORDS = leaflet.latLng(36.98949379578401, -122.06277128548504);
+const GRID_OFFSET = -.00005;
+
+// Tunable gameplay parameters
+const GAMEPLAY_ZOOM_LEVEL = 19;
+const TILE_DEGREES = 1e-4;
+const NEIGHBORHOOD_SIZE = 8;
+const CACHE_SPAWN_PROBABILITY = 0.1;
+
+// Board object
+const board: Board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE, GRID_OFFSET);
+const DEFAULT_CELL: Cell = board.getCellForPoint(ORIGIN_COORDS);
 
 interface Coin {
   origin: Cell;
@@ -117,22 +129,8 @@ interface Player {
   collection: Coin[];
 }
 
-// Origin (currently Null Island)
-const ORIGIN_COORDS = leaflet.latLng(0, 0);
-//const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
-const GRID_OFFSET = -.00005;
-
-// Tunable gameplay parameters
-const GAMEPLAY_ZOOM_LEVEL = 19;
-const TILE_DEGREES = 1e-4;
-const NEIGHBORHOOD_SIZE = 8;
-const CACHE_SPAWN_PROBABILITY = 0.1;
-
 // Player object
 const player: Player = { location: ORIGIN_COORDS, collection: [] };
-
-// Board object
-const board: Board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE, GRID_OFFSET);
 
 const unloaded_caches: string[] = [];
 let loaded_caches: Cache[] = [];
